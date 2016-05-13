@@ -1,0 +1,8 @@
+#!/bin/bash
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if (($# > 0)); then
+  $DIR/syncr $1 execute_as bamboo/monitoring-syncr -- $DIR/syncr "$@"
+else
+  $DIR/syncr
+fi

@@ -1,0 +1,109 @@
+---
+
+roles:
+  "bamboo/sshephalopod-syncr":
+    description: Role for syncing sshephalopod
+    allow_to_assume_me:
+      - { iam: "role/bamboo/bamboo-agent-role", account: devprod }
+      - { iam: "assumed-role/{vars.admin_role}", users: [smoore] }
+
+    allow_permission:
+      - { action: "lambda:*", resource: { arn: lambda, location: "us-east-1", identity: "function:*" } }
+      - { action: "iam:*", resource: "*" }
+
+  "lambda/sshephalopod-lambda-invoker":
+    description: Role for invoking a lambda function
+    allow_to_assume_me:
+      - Principal: { Service: lambda.amazonaws.com }
+
+    allow_permission:
+      - action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        resource: "arn:aws:logs:*:*:*"
+
+lambda:
+  sshephalopod_preauth:
+    description: sshephalopod as python
+    role: { iam: role/lambda/sshephalopod-lambda-invoker }
+    runtime: python2.7
+    handler: lambda_function.preauth
+    location: us-east-1
+    memory_size: 128
+    timeout: 30
+    code: { directory: { directory: "{config_folder}/../../src/preauth", exclude: ["venv/*", "deps/site-packages-folders/*-macosx*"] } }
+    sample_event:
+      callback_url: "https://sshephalopod.{vars.domain}/signing"
+      idp_metadata_endpoint: "{vars.idp_metadata_endpoint}"
+
+  sshephalopod_postauth:
+    description: sshephalopod as python
+    role: { iam: role/lambda/sshephalopod-lambda-invoker }
+    runtime: python2.7
+    handler: lambda_function.postauth_lambda
+    location: us-east-1
+    memory_size: 256
+    timeout: 30
+    code: { directory: { directory: "{config_folder}/../../src/postauth", exclude: ["venv/*", "deps/site-packages-folders/*-macosx*"] } }
+
+apigateway:
+  sshephalopod:
+    location:
+      us-east-1
+
+    stages:
+      - prod
+
+    api_keys:
+      - name: bamboo
+        stages: prod
+
+    domain_names:
+      sshephalopod:
+        zone: "{vars.domain}"
+        stage: prod
+        certificate: "{vars.certificate}"
+
+    resources:
+      "/signing":
+        methods:
+          GET:
+            integration: aws
+            function: "{lambda.sshephalopod_preauth}"
+            require_api_key: true
+
+            mapping:
+              content_type: "application/xml"
+              template: "$input.path('$')"
+
+            request_mapping:
+              content_type: "application/json"
+              template:
+                callback_url: "https://sshephalopod.{vars.domain}/signing"
+                idp_metadata_endpoint: "{vars.idp_metadata_endpoint}"
+
+          POST:
+            integration: aws
+            function: "{lambda.sshephalopod_postauth}"
+            require_api_key: true
+
+            mapping:
+              content_type: "application/json"
+              template: "$input.json('$')"
+
+            request_mapping:
+              content_type: "application/json"
+              template: '{{"Body": $input.json("$"), "idp_metadata_endpoint": "{vars.idp_metadata_endpoint}", "ca_key": {{"kms": "{vars.ca_key}"}}}}'
+
+      "/ca-pub":
+        methods:
+          GET:
+            integration: mock
+            mapping:
+              content_type: text/plain
+              template: "{vars.ca_pub_key}"
+
+dns:
+  sshephalopod:
+    zone: "{vars.domain}"
+    record_type: CNAME
+    record_target: "{apigateway.sshephalopod.domain_names.sshephalopod}"
+

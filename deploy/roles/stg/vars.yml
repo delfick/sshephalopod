@@ -1,0 +1,22 @@
+---
+vars:
+  admin_role: Stg-Administrator
+  certificate:
+    body:
+      kms: <crypto>
+      kms_data_key: <crypto>
+      location: ap-southeast-2
+    chain:
+      kms: <crypto>
+      kms_data_key: <crypto>
+      location: ap-southeast-2
+    key:
+      kms: <crypto>
+      kms_data_key: <crypto>
+      location: ap-southeast-2
+    name: star.stg.company.com.au
+  domain: stg.company.com.au
+  idp_metadata_endpoint: https://company.okta.com/app/<id>/sso/saml/metadata
+  ca_key: <crypto>
+  ca_pub_key: ssh-rsa <key>
+
